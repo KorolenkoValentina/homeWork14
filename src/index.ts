@@ -32,6 +32,11 @@ interface IObservable {
   notify(): void;
 }
 
+interface ITransaction {
+  execute(): void;
+  rollback(): void;
+}
+
 class CurrentRateConversionStrategy implements ICurrencyConversionStrategy {
   constructor(private exchangeRates: Record<CurrencyTypesEnum, number>) {}
 
@@ -71,11 +76,6 @@ abstract class Observable implements IObservable {
       observer.update(this);
     }
   }
-}
-
-interface ITransaction {
-  execute(): void;
-  rollback(): void;
 }
 
 class Transaction implements ITransaction {
