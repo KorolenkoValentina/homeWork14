@@ -148,12 +148,13 @@ class BankAccount extends Observable {
   public withdraw(amount: number, currency: CurrencyTypesEnum): void {
     const convertedAmount = this._conversionStrategy.convert(amount, currency);
 
-    if (this._balance < convertedAmount) {
-      throw new Error('Insufficient funds');
+    if (this._balance >= convertedAmount) {
+      this._balance -= convertedAmount;
+      this.notify();
+      console.log(`Withdrawal successful. Remaining balance: ${this._balance}`);
+    } else {
+      console.log("Insufficient funds for withdrawal in the specified currency.");
     }
-
-    this._balance -= convertedAmount;
-    this.notify();
   }
 
   public queueTransaction(transaction: ITransaction): void {
@@ -219,11 +220,11 @@ class Bank {
     account.queueTransaction(transaction);
   }
 
-  public executeQueuedTransactions(account: BankAccount): void {
+  public executeTransactionsIntheQueue (account: BankAccount): void {
     account.executeTransactions();
   }
 
-  public rollbackQueuedTransactions(account: BankAccount): void {
+  public rollbackTransactionsIntheQueue(account: BankAccount): void {
     account.rollbackTransactions();
   }
 }
@@ -260,46 +261,50 @@ const bank = Bank.getInstance();
 const currentRateStrategy = new CurrentRateConversionStrategy(exchangeRates);
 const fixedRateStrategy = new FixedRateConversionStrategy(0.5);
 
-const account = new BankAccount({ firstName: 'John', lastName: 'Doe' }, CurrencyTypesEnum.USD, currentRateStrategy, 1000);
-const account2 = new BankAccount({ firstName: 'John', lastName: 'Doe' }, CurrencyTypesEnum.EUR, currentRateStrategy, 800);
+// Створення клієнта
+const clientJohn = { firstName: 'John', lastName: 'Doe' };
 
-// Додавання транзакцій до черги
-bank.queueTransaction(account, new Transaction(account, 500, CurrencyTypesEnum.USD));
-bank.queueTransaction(account2, new Transaction(account2, 300, CurrencyTypesEnum.EUR));
+// Створення рахунків для клієнта
+const accountUSD = bank.createAccount(clientJohn, CurrencyTypesEnum.USD, currentRateStrategy, 1000);
+const accountEUR = bank.createAccount(clientJohn, CurrencyTypesEnum.EUR, currentRateStrategy, 800);
+const accountUAH = bank.createAccount(clientJohn, CurrencyTypesEnum.UAH, currentRateStrategy, 5000);
 
+// Виконання операцій з рахунками
+bank.queueTransaction(accountUSD, new Transaction(accountUSD, 500, CurrencyTypesEnum.USD));
+bank.queueTransaction(accountEUR, new Transaction(accountEUR, 300, CurrencyTypesEnum.EUR));
+bank.queueTransaction(accountUAH, new Transaction(accountUAH, 200, CurrencyTypesEnum.UAH));
 
-// Виконання транзакцій для всіх рахунків клієнта
-bank.executeQueuedTransactions(account);
-bank.executeQueuedTransactions(account2);
+bank.executeTransactionsIntheQueue(accountUSD);
+bank.executeTransactionsIntheQueue(accountEUR);
+bank.executeTransactionsIntheQueue(accountUAH);
 
-// Створення нової транзакції та її відміна
-const newTransaction = new Transaction(account, 200, CurrencyTypesEnum.USD);
-bank.queueTransaction(account, newTransaction);
-bank.executeQueuedTransactions(account);
-bank.rollbackQueuedTransactions(account);
+const newTransaction = new Transaction(accountUSD, 200, CurrencyTypesEnum.USD);
+bank.queueTransaction(accountUSD, newTransaction);
+bank.executeTransactionsIntheQueue(accountUSD);
+bank.rollbackTransactionsIntheQueue(accountUSD);
 
 // Закриття банківського рахунку
-bank.closeAccount(account);
+bank.closeAccount(accountUSD);
 
-// Отримання поточного балансу рахунків та виведення інформації про них
-console.log(`Current balance of account 1: ${account.balance}`);
-console.log(`Current balance of account 2: ${account2.balance}`);
+console.log(`Current balance of USD account: ${accountUSD.balance}`);
+console.log(`Current balance of EUR account: ${accountEUR.balance}`);
+console.log(`Current balance of UAH account: ${accountUAH.balance}`);
 
 
-// Приклад роботи з оповіщеннями:
+// Приклад використання сповіщень
+const smsNotification = new SMSNotification();
+const emailNotification = new EmailNotification();
+const pushNotification = new PushNotification();
 
-const smsNotificaton = new SMSNotification();
-const emailNotificaton = new EmailNotification();
-const pushNotificaton = new PushNotification();
+accountUSD.attach(smsNotification);
+accountUSD.attach(emailNotification);
+accountUSD.attach(pushNotification);
 
-account.attach(smsNotificaton);
-account.attach(emailNotificaton);
-account.attach(pushNotificaton);
+accountUSD.deposite(500);
+accountUSD.withdraw(100, CurrencyTypesEnum.USD);
 
-account.deposite(1000);
+accountUSD.detach(emailNotification);
+accountUSD.detach(pushNotification);
 
-account.detach(emailNotificaton);
-account.detach(pushNotificaton);
-
-account.conversionStrategy = fixedRateStrategy;
-account.withdraw(100, CurrencyTypesEnum.UAH);
+accountUSD.conversionStrategy = fixedRateStrategy;
+accountUSD.withdraw(100, CurrencyTypesEnum.UAH);
