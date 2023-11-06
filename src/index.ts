@@ -156,11 +156,6 @@ class BankAccount extends Observable {
     this.notify();
   }
 
-  notify() {
-    for (const observer of this.observers) {
-      observer.update(this);
-    }
-  }
   public queueTransaction(transaction: ITransaction): void {
     this.transactionsQueue.push(transaction);
   }
