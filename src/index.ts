@@ -255,7 +255,7 @@ class PushNotification implements IObserver {
   }
 }
 
-// Привідний код для використання функціоналу банку
+// використання функціоналу банку
 
 const exchangeRates = {
   [CurrencyTypesEnum.USD]: 1.1,
