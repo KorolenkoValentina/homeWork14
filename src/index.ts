@@ -83,10 +83,13 @@ class Transaction implements ITransaction {
   private newBalance: number;
   private executed: boolean = false;
   private reverted: boolean = false;
+  private operationType: 'deposit' | 'withdraw';
+  
 
-  constructor(private account: BankAccount, private amount: number, private currency: CurrencyTypesEnum) {
+  constructor(private account: BankAccount,private operation: 'deposit' | 'withdraw', private amount: number, private currency: CurrencyTypesEnum) {
     this.initialBalance = account.balance;
     this.newBalance = this.initialBalance;
+    this.operationType = operation;
   }
 
   public execute(): void {
@@ -94,7 +97,12 @@ class Transaction implements ITransaction {
       throw new Error('Transaction has already been executed.');
     }
 
-    this.account.withdraw(this.amount, this.currency);
+    if (this.operationType === 'deposit') {
+      this.account.deposite(this.amount);
+    } else {
+      this.account.withdraw(this.amount, this.currency);
+    }
+
     this.newBalance = this.account.balance;
     this.executed = true;
   }
@@ -108,10 +116,16 @@ class Transaction implements ITransaction {
       throw new Error('Transaction has already been reverted.');
     }
 
-    const amountToDeposit = this.initialBalance - this.newBalance;
-    this.account.deposite(amountToDeposit);
+    if (this.operationType === 'deposit') {
+      this.account.withdraw(this.amount, this.currency);
+    } else {
+      this.account.deposite(this.amount);
+    }
+
     this.reverted = true;
+  
   }
+
 }
 
 
@@ -263,43 +277,18 @@ const exchangeRates = {
   [CurrencyTypesEnum.UAH]: 38,
 };
 
-
 const bank = Bank.getInstance();
 
 const currentRateStrategy = new CurrentRateConversionStrategy(exchangeRates);
 const fixedRateStrategy = new FixedRateConversionStrategy(0.5);
 
-// Створення клієнта
 const clientJohn = { firstName: 'John', lastName: 'Doe' };
 
-// Створення рахунків для клієнта
 const accountUSD = bank.createAccount(clientJohn, CurrencyTypesEnum.USD, currentRateStrategy, 1000);
 const accountEUR = bank.createAccount(clientJohn, CurrencyTypesEnum.EUR, currentRateStrategy, 800);
 const accountUAH = bank.createAccount(clientJohn, CurrencyTypesEnum.UAH, currentRateStrategy, 5000);
 
-// Виконання операцій з рахунками
-bank.queueTransaction(accountUSD, new Transaction(accountUSD, 500, CurrencyTypesEnum.USD));
-bank.queueTransaction(accountEUR, new Transaction(accountEUR, 300, CurrencyTypesEnum.EUR));
-bank.queueTransaction(accountUAH, new Transaction(accountUAH, 200, CurrencyTypesEnum.UAH));
 
-bank.executeTransactionsIntheQueue(accountUSD);
-bank.executeTransactionsIntheQueue(accountEUR);
-bank.executeTransactionsIntheQueue(accountUAH);
-
-const newTransaction = new Transaction(accountUSD, 200, CurrencyTypesEnum.USD);
-bank.queueTransaction(accountUSD, newTransaction);
-bank.executeTransactionsIntheQueue(accountUSD);
-bank.rollbackTransactionsIntheQueue(accountUSD);
-
-// Закриття банківського рахунку
-bank.closeAccount(accountUSD);
-
-console.log(`Current balance of USD account: ${accountUSD.balance}`);
-console.log(`Current balance of EUR account: ${accountEUR.balance}`);
-console.log(`Current balance of UAH account: ${accountUAH.balance}`);
-
-
-// Приклад використання сповіщень
 const smsNotification = new SMSNotification();
 const emailNotification = new EmailNotification();
 const pushNotification = new PushNotification();
@@ -308,11 +297,21 @@ accountUSD.attach(smsNotification);
 accountUSD.attach(emailNotification);
 accountUSD.attach(pushNotification);
 
-accountUSD.deposite(500);
-accountUSD.withdraw(100, CurrencyTypesEnum.USD);
+const depositTransaction = new Transaction(accountUSD, 'deposit', 500, CurrencyTypesEnum.USD);
+const withdrawTransaction = new Transaction(accountUSD, 'withdraw', 200, CurrencyTypesEnum.USD);
 
-accountUSD.detach(emailNotification);
-accountUSD.detach(pushNotification);
+bank.queueTransaction(accountUSD, depositTransaction);
+bank.queueTransaction(accountUSD, withdrawTransaction);
+
+bank.executeTransactionsIntheQueue(accountUSD);
+
 
 accountUSD.conversionStrategy = fixedRateStrategy;
+
 accountUSD.withdraw(100, CurrencyTypesEnum.UAH);
+
+// Закриття рахунку
+bank.closeAccount(accountUSD);
+
+// Відкат операцій
+bank.rollbackTransactionsIntheQueue(accountUSD);
