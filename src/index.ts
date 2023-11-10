@@ -78,32 +78,17 @@ abstract class Observable implements IObservable {
   }
 }
 
-class Transaction implements ITransaction {
-  private initialBalance: number;
-  private newBalance: number;
+class DepositTransaction  implements ITransaction {
   private executed: boolean = false;
-  private reverted: boolean = false;
-  private operationType: 'deposit' | 'withdraw';
-  
 
-  constructor(private account: BankAccount,private operation: 'deposit' | 'withdraw', private amount: number, private currency: CurrencyTypesEnum) {
-    this.initialBalance = account.balance;
-    this.newBalance = this.initialBalance;
-    this.operationType = operation;
-  }
+  constructor(private account: BankAccount, private amount: number, private currency:CurrencyTypesEnum) {}
 
   public execute(): void {
     if (this.executed) {
       throw new Error('Transaction has already been executed.');
     }
 
-    if (this.operationType === 'deposit') {
-      this.account.deposite(this.amount);
-    } else {
-      this.account.withdraw(this.amount, this.currency);
-    }
-
-    this.newBalance = this.account.balance;
+    this.account.deposite(this.amount);
     this.executed = true;
   }
 
@@ -112,32 +97,64 @@ class Transaction implements ITransaction {
       throw new Error('Cannot rollback a transaction that has not been executed.');
     }
 
-    if (this.reverted) {
-      throw new Error('Transaction has already been reverted.');
-    }
-
-    if (this.operationType === 'deposit') {
-      this.account.withdraw(this.amount, this.currency);
-    } else {
-      this.account.deposite(this.amount);
-    }
-
-    this.reverted = true;
-  
+    this.account.withdraw(this.amount, this.currency);
   }
-
 }
 
+class WithdrawTransaction implements ITransaction {
+  private executed: boolean = false;
+
+  constructor(private account: BankAccount, private amount: number, private currency: CurrencyTypesEnum) {}
+
+  public execute(): void {
+    if (this.executed) {
+      throw new Error('Transaction has already been executed.');
+    }
+
+    this.account.withdraw(this.amount, this.currency);
+    this.executed = true;
+  }
+
+  public rollback(): void {
+    if (!this.executed) {
+      throw new Error('Cannot rollback a transaction that has not been executed.');
+    }
+
+    this.account.deposite(this.amount);
+  }
+}
+
+class TransactionQueue {
+  private transactions: ITransaction[] = [];
+
+  public enqueue(transaction: ITransaction): void {
+    this.transactions.push(transaction);
+  }
+
+  public executeAll(): void {
+    for (const transaction of this.transactions) {
+      transaction.execute();
+    }
+    this.transactions = [];
+  }
+
+  public rollbackAll(): void {
+    for (const transaction of this.transactions.reverse()) {
+      transaction.rollback();
+    }
+    this.transactions = [];
+  }
+}
 
 class BankAccount extends Observable {
   private readonly currency: CurrencyTypesEnum;
   private readonly _number: number;
-  private _balance :number;
+  private _balance: number;
   private _holder: IBankClient;
   private _conversionStrategy: ICurrencyConversionStrategy;
-  private transactionsQueue: ITransaction[] = [];
+  private transactionsQueue: TransactionQueue = new TransactionQueue();
 
-  constructor(client: IBankClient, currency: CurrencyTypesEnum, conversionStrategy: ICurrencyConversionStrategy,initialBalance: number = 0) {
+  constructor(client: IBankClient, currency: CurrencyTypesEnum, conversionStrategy: ICurrencyConversionStrategy, initialBalance: number = 0) {
     super();
     this.currency = currency;
     this._holder = client;
@@ -180,23 +197,15 @@ class BankAccount extends Observable {
   }
 
   public queueTransaction(transaction: ITransaction): void {
-    this.transactionsQueue.push(transaction);
+    this.transactionsQueue.enqueue(transaction);
   }
 
   public executeTransactions(): void {
-    this.transactionsQueue.forEach(transaction => {
-      transaction.execute();
-    });
-    this.transactionsQueue = [];
+    this.transactionsQueue.executeAll();
   }
 
   public rollbackTransactions(): void {
-    while (this.transactionsQueue.length > 0) {
-      const transaction = this.transactionsQueue.pop();
-      if (transaction) {
-        transaction.rollback();
-      }
-    }
+    this.transactionsQueue.rollbackAll();
   }
 }
 
@@ -221,7 +230,7 @@ class Bank {
       this.accounts.set(client, accounts);
     }
 
-    const account = new BankAccount(client, currency, conversionStrategy,initialBalance);
+    const account = new BankAccount(client, currency, conversionStrategy, initialBalance);
     accounts.push(account);
 
     return account;
@@ -242,30 +251,30 @@ class Bank {
     account.queueTransaction(transaction);
   }
 
-  public executeTransactionsIntheQueue (account: BankAccount): void {
+  public executeTransactionsInTheQueue(account: BankAccount): void {
     account.executeTransactions();
   }
 
-  public rollbackTransactionsIntheQueue(account: BankAccount): void {
+  public rollbackTransactionsInTheQueue(account: BankAccount): void {
     account.rollbackTransactions();
   }
 }
 
 class SMSNotification implements IObserver {
   update(account: BankAccount): void {
-    console.log(`SMS notification: Your account balance has chenged. Current balance: ${account.balance}`);
+    console.log(`SMS notification: Your account balance has changed. Current balance: ${account.balance}`);
   }
 }
 
 class EmailNotification implements IObserver {
   update(account: BankAccount): void {
-    console.log(`Email notification: Your account balance has chenged. Current balance: ${account.balance}`);
+    console.log(`Email notification: Your account balance has changed. Current balance: ${account.balance}`);
   }
 }
 
 class PushNotification implements IObserver {
   update(account: BankAccount): void {
-    console.log(`Push notification: Your account balance has chenged. Current balance: ${account.balance}`);
+    console.log(`Push notification: Your account balance has changed. Current balance: ${account.balance}`);
   }
 }
 
@@ -297,21 +306,24 @@ accountUSD.attach(smsNotification);
 accountUSD.attach(emailNotification);
 accountUSD.attach(pushNotification);
 
-const depositTransaction = new Transaction(accountUSD, 'deposit', 500, CurrencyTypesEnum.USD);
-const withdrawTransaction = new Transaction(accountUSD, 'withdraw', 200, CurrencyTypesEnum.USD);
+accountUAH.deposite(2000);
+console.log (accountUAH)
 
-bank.queueTransaction(accountUSD, depositTransaction);
-bank.queueTransaction(accountUSD, withdrawTransaction);
 
-bank.executeTransactionsIntheQueue(accountUSD);
+const depositTransaction = new DepositTransaction (accountUSD, 500, CurrencyTypesEnum.USD);
+const withdrawTransaction = new WithdrawTransaction (accountUSD, 200, CurrencyTypesEnum.USD);
 
+accountUSD.queueTransaction(depositTransaction);
+accountUSD.queueTransaction(withdrawTransaction);
+
+accountUSD.executeTransactions();
 
 accountUSD.conversionStrategy = fixedRateStrategy;
 
 accountUSD.withdraw(100, CurrencyTypesEnum.UAH);
 
-// Закриття рахунку
+
 bank.closeAccount(accountUSD);
 
-// Відкат операцій
-bank.rollbackTransactionsIntheQueue(accountUSD);
+
+accountUSD.rollbackTransactions();
